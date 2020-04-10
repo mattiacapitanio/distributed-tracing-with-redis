@@ -1,6 +1,41 @@
 version: '3'
 
 services:
+
+  nodejs-service:
+    build: nodejs-service
+    # env_file: nodejs-service/.env
+    environment:
+      JAEGER_SERVICE_NAME: nodejs-service
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      # by default, jaeger-client sends traces to an agent on localhost:6832
+      # override and send traces to http://tracing-backend:6832
+      JAEGER_AGENT_HOST: jaeger-agent
+      JAEGER_AGENT_PORT: 6832
+    ports:
+      - "9229:9229" # nodejs debugging port
+    # override the dockerfile startup command to:
+    # 1) restart on file changes using nodemon
+    # 2) start nodejs in debug mode and allow connections from all IPs
+    # our healthcheck hack is to request the current sampling strategy.
+    command: wait.sh http://jaeger-agent:5778?service 5 20 "nodemon --inspect=0.0.0.0 ."
+    volumes:
+      - ./nodejs-service/src:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - aparnet
+    depends_on:
+      - jaeger-agent
+      - redis
+
+  redis:
+    image: redis:5.0-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - aparnet
+
   jaeger-agent:
     build: jaeger-agent
     environment:
