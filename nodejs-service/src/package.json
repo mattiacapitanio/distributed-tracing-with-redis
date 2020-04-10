@@ -1,0 +1,16 @@
+{
+  "name": "nodejs-service",
+  "version": "1.0.0",
+  "description": "1. Build and run image.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "mc",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "jaeger-client": "^3.17.2",
+    "opentracing": "^0.14.4"
+  }
+}
