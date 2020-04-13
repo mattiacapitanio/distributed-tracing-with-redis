@@ -15,12 +15,12 @@ async function execute(id, contextId) {
     const parentSpan = await createContinuationSpan(tracer, 'process-span', contextId)
     try {
         const firstSpan = tracer.startSpan('task-1', {childOf: parentSpan})
-        const t1 = await sleep(3000)
+        const t1 = await sleep(250, 750)
         console.log(`task-1 done!`)
         firstSpan.finish()
 
         const secondSpan = tracer.startSpan('task-2', {childOf: parentSpan})
-        const t2 = await sleep(2000)
+        const t2 = await sleep(500, 1500)
         console.log(`task-2 done!`)
         secondSpan.finish()
     } catch(err) {
@@ -30,9 +30,13 @@ async function execute(id, contextId) {
     parentSpan.finish()
 }
 
-function sleep(msDelay) {
-	return new Promise((resolve, reject) => {
-		setTimeout(() => { resolve() }, msDelay)
+function sleep(msDelay, maxDelay = undefined) {
+    return new Promise((resolve, reject) => {
+        if (maxDelay) {
+            msDelay = Math.random() * (maxDelay - msDelay) + msDelay
+        }
+        console.log(msDelay)
+        setTimeout(() => { resolve() }, msDelay)
 	})
 }
 
@@ -90,14 +94,13 @@ async function createContinuationSpan(tracer, spanName, id = undefined) {
     await saveContext(id, mainSpan.context())
 
     const childSpan = tracer.startSpan('task-0', {childOf: mainSpan})
-    const t2 = await sleep(1500)
+    const t2 = await sleep(1000, 2000)
     console.log(`task-0 done!`)
     childSpan.finish()
 
     for (let index = 0; index < 3; index++) {
         console.log(`execute ${index}`)
         await execute(index, id)
-        await sleep(5000)
     }
 
     console.log(`End service`)
