@@ -31,6 +31,26 @@ services:
       - jaeger-agent
       - redis
 
+  python-service:
+    build: python-service
+    environment:
+      JAEGER_SERVICE_NAME: python-service
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      JAEGER_AGENT_HOST: jaeger-agent
+      JAEGER_AGENT_PORT: 6831
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: wait.sh http://jaeger-agent:5778?service 5 20 "sh"
+    volumes:
+      - ./python-service/src:/usr/src/app
+      # - /usr/src/app/venv
+    networks:
+      - aparnet
+    depends_on:
+      - jaeger-agent
+      - redis     
+
   redis:
     image: redis:5.0-alpine
     ports:
