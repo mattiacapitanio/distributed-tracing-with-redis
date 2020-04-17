@@ -2,17 +2,19 @@ version: '3'
 
 services:
 
-  nodejs-service:
-    build: nodejs-service
+  apps:
+    build: apps
     # env_file: nodejs-service/.env
     environment:
-      JAEGER_SERVICE_NAME: nodejs-service
+      JAEGER_SERVICE_NAME: nodejs-app
+      JAEGER_PYTHON_APP_NAME: python-app
       JAEGER_SAMPLER_TYPE: const
       JAEGER_SAMPLER_PARAM: 1
       # by default, jaeger-client sends traces to an agent on localhost:6832
       # override and send traces to http://tracing-backend:6832
       JAEGER_AGENT_HOST: jaeger-agent
       JAEGER_AGENT_PORT: 6832
+      JAEGER_AGENT_PORT_COMPACT: 6831
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
@@ -23,33 +25,14 @@ services:
     # our healthcheck hack is to request the current sampling strategy.
     command: wait.sh http://jaeger-agent:5778?service 5 20 "nodemon --inspect=0.0.0.0 ."
     volumes:
-      - ./nodejs-service/src:/usr/src/app
-      - /usr/src/app/node_modules
+      - ./apps/python-src:/usr/src/python-app
+      - ./apps/nodejs-src:/usr/src/nodejs-app
+      - /usr/src/nodejs-app/node_modules
     networks:
       - aparnet
     depends_on:
       - jaeger-agent
       - redis
-
-  python-service:
-    build: python-service
-    environment:
-      JAEGER_SERVICE_NAME: python-service
-      JAEGER_SAMPLER_TYPE: const
-      JAEGER_SAMPLER_PARAM: 1
-      JAEGER_AGENT_HOST: jaeger-agent
-      JAEGER_AGENT_PORT: 6831
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    command: wait.sh http://jaeger-agent:5778?service 5 20 "sh"
-    volumes:
-      - ./python-service/src:/usr/src/app
-      # - /usr/src/app/venv
-    networks:
-      - aparnet
-    depends_on:
-      - jaeger-agent
-      - redis     
 
   redis:
     image: redis:5.0-alpine
