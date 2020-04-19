@@ -2,7 +2,8 @@ import sys
 import os 
 import logging
 import json
-from time import sleep
+import time
+import random
 import opentracing
 from opentracing.propagation import Format
 import redis
@@ -34,19 +35,62 @@ redis_cli = redis.Redis(
     db=0
 )
 
+def sleep(minDelay, maxDelay=None):
+    if maxDelay is not None:
+        minDelay = random.random() * (maxDelay - minDelay) + minDelay
+    time.sleep(minDelay)
+
+def simulateOperation(minDelay, maxDelay=None, failure=None):
+    if failure is not None and random.random() < failure:
+        raise ValueError('Operation failed!')
+    sleep(minDelay, maxDelay)
+
+def load_data():
+    simulateOperation(
+        minDelay=.175, maxDelay=.225, failure=0.1
+    )
+
+def save_data():
+    simulateOperation(
+        minDelay=.380, maxDelay=.700, failure=.2
+    )
+
+def process_data():
+    simulateOperation(
+        minDelay=1.5, maxDelay=2.5
+    )
 
 def execute_task(id):
-    # span = tracer.start_span('say-hello')
     span = create_continuation_span(
         tracer=opentracing.global_tracer(),
-        span_name='my-task',
+        span_name='worker-two',
         id=id)
     with tracer.scope_manager.activate(span, True) as scope:
         try:
-            span.set_tag('job-id', '{}'.format(id))
-            span.set_tag('say-hello-to', 'me')
-            span.log_kv({'event': 'string-format', 'value': 'log-me'})
-            sleep(1)
+            span.log_kv({
+                'event': 'debug', 
+                'message': 'Start task with job id: {}'.format(id)
+            })
+            childSpan = tracer.start_span(
+                operation_name='load-data',
+                child_of=span
+            )
+            load_data()
+            childSpan.finish()
+
+            childSpan = tracer.start_span(
+                operation_name='process-data',
+                child_of=span
+            )
+            process_data()
+            childSpan.finish()
+
+            childSpan = tracer.start_span(
+                operation_name='save-data',
+                child_of=span
+            )
+            save_data()
+            childSpan.finish()
         except Exception as e:
             span.set_tag('error', e)
         finally:
@@ -89,12 +133,9 @@ def create_continuation_span(tracer, span_name, id):
     return tracer.start_span(operation_name=span_name)
 
 def run(): 
-    job_id=sys.argv[1]
-    print('Start service id: {}'.format(job_id))
-    execute_task(job_id)
-    print('End service')
+    execute_task(id=sys.argv[1])
     tracer.close()  # flush any buffered spans
-    sleep(1)
+    sleep(.1)
     sys.exit(0)
 
 run()
