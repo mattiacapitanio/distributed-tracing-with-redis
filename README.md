@@ -9,3 +9,42 @@
 1. Visit http://localhost:16686 to view traces.
 
 
+
+
+
+
+Architecture
+
+Nodejs App 
+- http request
+- load data from db
+- processing
+- saving data on db 
+- run python process
+- load data from db
+- process data 
+- saving data on db
+
+
+
+Distributed Tracing Components
+
++-------------------+         +------------------+
+|                   |         |                  |
+|       Apps        +--------->      Redis       |
+|                   |         |                  |
++---------+---------+         +------------------+
+          |
+          |
++---------v---------+ 
+|                   |
+|    Jaeger-Agent   |
+|                   |
++---------+---------+
+          |                     
+          |
++---------v---------+         +------------------+
+|                   |         |                  |
+|  Jaeger-Collector +--------->   Elasticsearch  |
+|                   |         |                  |
++---------+---------+         +------------------+
