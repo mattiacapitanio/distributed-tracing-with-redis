@@ -13,40 +13,44 @@ const redis = require('redis').createClient({
 
 
 async function executeHttpRequest(parentSpan) {
-    const span = tracer.startSpan('http-request', {childOf: parentSpan})
+    const opName = 'http-request'
+    const span = tracer.startSpan(opName, {childOf: parentSpan})
     span.setTag(tags.HTTP_METHOD, 'https://request-to-url.com/')
-    await simulateOperation(500, 2500, 0.5)    
-    span.log({'event': 'http-request'});
+    await simulateOperation(opName, 500, 2500, 0.9)    
+    span.log({'event': opName});
     span.finish()
 }
 
 async function loadData(parentSpan) {
-    const span = tracer.startSpan('load-data', {childOf: parentSpan})
-    await simulateOperation(100, 150, 0.1)
+    const opName = 'load-data'
+    const span = tracer.startSpan(opName, {childOf: parentSpan})
+    await simulateOperation(opName, 100, 150, 0.1)
     const rows = []
     for (let index = Math.random() * 100; index > 0; index--) {
         rows.push(index)
     }
     span.setTag('rows-count', rows.length)
-    span.log({'event': 'load-data', 'rows-count': rows.length, 'message': 'Data loaded from db'})
+    span.log({'event': opName, 'rows-count': rows.length, 'message': 'Data loaded from db'})
     span.finish()
     return rows
 }
 
 async function processData(parentSpan) {
-    const span = tracer.startSpan('process-data', {childOf: parentSpan})
-    await simulateOperation(500, 1500)
+    const opName = 'process-data'
+    const span = tracer.startSpan(opName, {childOf: parentSpan})
+    await simulateOperation(opName, 500, 1500)
     const value = Math.random() * 10
     span.setTag( 'result-value', value)
-    span.log({'event': 'process-data', 'result-value': value, 'message': 'Data processed'})
+    span.log({'event': opName, 'result-value': value, 'message': 'Data processed'})
     span.finish()
     return value
 }
 
 async function saveData(parentSpan) {
-    const span = tracer.startSpan('save-data', {childOf: parentSpan})
-    span.log({'event': 'save-data', 'message': 'Result correctly saved on db'});
-    await simulateOperation(200, 250, 0.1)
+    const opName = 'save-data'
+    const span = tracer.startSpan(opName, {childOf: parentSpan})
+    span.log({'event': opName, 'message': 'Result correctly saved on db'});
+    await simulateOperation(opName, 200, 250, 0.1)
     span.finish()
 }
 
@@ -82,9 +86,9 @@ function sleep(msDelay, maxDelay = undefined) {
 	})
 }
 
-async function simulateOperation(msDelay, maxDelay=undefined, failure=undefined) {
+async function simulateOperation(opName, msDelay, maxDelay=undefined, failure=undefined) {
     if (failure && Math.random() < failure)
-        throw 'Error: operation failed!'
+        throw new Error(`Operation '${opName}' failed!`)
     await sleep(msDelay, maxDelay)
 }
 
