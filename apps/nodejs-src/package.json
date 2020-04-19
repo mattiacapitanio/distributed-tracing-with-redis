@@ -1,8 +1,8 @@
 {
-  "name": "nodejs-service",
+  "name": "nodejs-app",
   "version": "1.0.0",
   "description": "1. Build and run image.",
-  "main": "service.js",
+  "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
