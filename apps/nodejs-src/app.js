@@ -16,7 +16,7 @@ async function executeHttpRequest(parentSpan) {
     const opName = 'http-request'
     const span = tracer.startSpan(opName, {childOf: parentSpan})
     span.setTag(tags.HTTP_METHOD, 'https://request-to-url.com/')
-    await simulateOperation(opName, 500, 2500, 0.9)    
+    await simulateOperation(opName, 500, 2500, 0.3)    
     span.log({'event': opName});
     span.finish()
 }
