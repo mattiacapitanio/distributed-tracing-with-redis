@@ -6,8 +6,8 @@ const redis = require('redis').createClient({
 });
 
 class Tracer {
-    constructor() {
-        this.tracer = jaegerClient.initTracerFromEnv()
+    constructor(name) {
+        this.tracer = jaegerClient.initTracerFromEnv({serviceName: name})
     }
     
     createSpan(spanName, parentSpan = undefined) {
@@ -60,6 +60,6 @@ class Tracer {
     }
 }
 
-exports.Tracer = () => {
-    return tracer = new Tracer()
+exports.Tracer = (name) => {
+    return tracer = new Tracer(name)
 }

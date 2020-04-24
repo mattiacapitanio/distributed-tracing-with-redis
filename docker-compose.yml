@@ -6,7 +6,8 @@ services:
     build: apps
     # env_file: nodejs-service/.env
     environment:
-      JAEGER_SERVICE_NAME: nodejs-app
+      JAEGER_SERVICE_NAME: main-service
+      JAEGER_NODEJS_APP_NAME: nodejs-app
       JAEGER_PYTHON_APP_NAME: python-app
       JAEGER_SAMPLER_TYPE: const
       JAEGER_SAMPLER_PARAM: 1

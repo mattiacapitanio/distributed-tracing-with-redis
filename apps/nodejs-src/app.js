@@ -1,5 +1,7 @@
 const taskRunner = require('./taskRunner')
-const tracer = require('./tracer').Tracer()
+const tracer = require('./tracer').Tracer(
+    process.env.JAEGER_SERVICE_NAME
+)
 
 async function runCommand(cmd) {
     await require('child_process').execSync(cmd)
@@ -10,25 +12,25 @@ async function taskOne(jobId) {
 }
 
 async function taskTwo(jobId) {
-    // await runCommand(`python3 /usr/src/python-app/app.py ${id}`)
+    await runCommand(`python3 /usr/src/python-app/worker.py ${jobId}`)
 }
 
 
 (async () => {
     while (true) {
         const jobId = Math.floor(new Date() / 1000)
-        const mainSpan = await tracer.createSpan('main-span')
+        const mainSpan = await tracer.createSpan(`job-${jobId}`)
+        mainSpan.setTag('job-id', jobId)
         mainSpan.log({
             'event': 'debug', 
             'jobid': jobId, 
             'message': `Start new job with id: ${jobId}`
         })
         await tracer.saveContext(jobId, mainSpan.context())
+        await taskRunner.simulateOperation(250, 500)
         mainSpan.finish()
-        console.log('up!')
         await taskOne(jobId)
-        // await taskTwo(jobId)
-        console.log('done!')
+        await taskTwo(jobId)
         await taskRunner.simulateOperation(30000, 90000)
     }
 }) ();

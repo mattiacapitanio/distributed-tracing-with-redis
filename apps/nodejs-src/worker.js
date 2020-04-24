@@ -1,5 +1,7 @@
 const taskRunner = require(`./taskRunner.js`)
-const tracer = require(`./tracer.js`).Tracer()
+const tracer = require(`./tracer.js`).Tracer(
+    process.env.JAEGER_NODEJS_APP_NAME
+)
 const tags = require('opentracing').Tags
 
 class Worker {
@@ -63,7 +65,7 @@ class Worker {
 
 (async (jobId) => {
     const parentSpan = await tracer.createContinuationSpan(
-        'worker-one', jobId
+        `w1-${jobId}`, jobId
     ) 
     parentSpan.setTag('job-id', jobId)
     parentSpan.log({
@@ -94,6 +96,6 @@ class Worker {
     parentSpan.finish()
     setTimeout(() => {
         process.exit(0)
-    }, 500);    
+    }, 750);    
 })(process.argv[2])
 
