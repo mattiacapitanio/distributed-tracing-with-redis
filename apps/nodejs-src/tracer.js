@@ -10,7 +10,7 @@ class Tracer {
         this.tracer = jaegerClient.initTracerFromEnv()
     }
     
-    async createSpan(spanName, parentSpan = undefined) {
+    createSpan(spanName, parentSpan = undefined) {
         if (parentSpan)
             return this.tracer.startSpan(spanName, {
                 childOf: parentSpan
@@ -19,9 +19,9 @@ class Tracer {
     }
 
     async createContinuationSpan(spanName, contextId) {
-        return this.createChildSpanFromParent(
+        return this.createSpan(
             spanName, 
-            extractSpan(await this.loadContext(contextId))
+            this.extractSpan(await this.loadContext(contextId))
         )
     }
     
