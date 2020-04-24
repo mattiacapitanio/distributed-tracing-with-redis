@@ -96,6 +96,5 @@ class Worker {
     parentSpan.finish()
     setTimeout(() => {
         process.exit(0)
-    }, 750);    
+    }, 1000)
 })(process.argv[2])
-
