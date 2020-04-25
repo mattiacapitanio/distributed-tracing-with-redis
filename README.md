@@ -1,116 +1,170 @@
 # Distributed tracing using Redis as message bus
 
+An example of distributed tracing with Redis as message bus.
+
 ## Description 
 
-A simple example of distrubuted tracing using Redis as message bus for trasportation system.
+[TODO]
 
-## How to start the project
-1. Clone the repo and open the root folder in an IDE like *Visual Studio Code*.
+## Project requirements
+- Docker compose 1.25.4
+- GNU/Linux
+
+## Project setup 
+1. Clone the repo and open the root folder
 
 1. Start all microservices with the command:
 
         docker-compose -f docker-compose.yml up -d --build
 
-1. Visit http://localhost:16686 to view traces.
+1. Visit http://localhost:16686 to view traces
+
 
 ## Project architecture
 
-In the project we will use the follow technologies:
-- NodeJS
-- Python 
-- Redis
-- Jaeger (agent, collector, query)
-- Opentracing
+The system is composed by the follow modules: 
+- Apps (that contains two NodeJS apps and a Phyton app)
+- Redis 
+- Jaeger Agent
+- Jaeger Collector
+- Jaeger Query/UI
 - Elasticsearch
-- Docker-compose
+
+Each module is deployed by a docker container through a docker-compose.
 
 ### Tracing infrastructure
 
-![Tracing infrastructure](docs/tracing-infrastructure.png) 
+![Tracing infrastructure](docs/tracing-infrastructure.jpg) 
 
 ### End to end transaction cycle
 
-![End-to-end transaction](docs/end-to-end-transaction.png) 
+![End-to-end transaction](docs/e2e-transaction.jpg) 
+
+### Tracing details
 
 ## Redis as message bus
 
-The 2 apps Worker-1 (NodeJS) and Worker-2 (Python) use Redis to pass the span context. The context is saved using the Job ID as key. 
+As described above, the 3 apps: *main-service*, *worker-one* and *worker-two* use Redis to pass the span context.   
+The context is saved in Redis using a *job-id* as key. 
 
-### NodeJS code
+### Main Service code (NodeJS)
 
-The follow code is used to read and write the span context in Redis.
-
-```
-function saveContext(id, context) {
-    return new Promise((resolve, reject) => {
-        var map = {}
-        tracer.inject(context, opentracing.FORMAT_TEXT_MAP, map)
-        redis.set(id, JSON.stringify(map), (err) => {
-            if (err) { reject(err) }
-            resolve()
-        })
-    })
-}
-
-function loadContext(id) {
-    return new Promise((resolve, reject) => {
-        if (!id) resolve(undefined)
-        redis.get(id, (err, reply) => {
-            if (err) {
-                reject(err)
-            }
-            if (reply) { 
-                resolve(JSON.parse(reply.toString()))
-            } else {
-                resolve(undefined)
-            }
-        })
-    })
-}
-
-function extractContext(tracer, context) {
-    if (context) {
-        return tracer.extract(opentracing.FORMAT_TEXT_MAP, context)
-    }
-    return undefined
-}
-
-async function createContinuationSpan(tracer, spanName, id = undefined) {
-    const incomingSpanContext = extractContext(tracer, await loadContext
-    ... 
-}
-```
-
-### Python code
-
-The follow code is used to read the span context from Redis.
+At startup the *main-service* creates a new span and saves the context it in Redis.
 
 ```
-def create_continuation_span(tracer, span_name, id):
-    incoming_span_context = extract_context(tracer, load_carrier(id))
+    /* apps/nodejs-src/app.js */
+    const jobId = Math.floor(new Date() / 1000)
+    const mainSpan = await tracer.createSpan(`job-${jobId}`)
     ...
-
-def load_carrier(id):
-    if id is None:
-        return None
-    byte = redis_cli.get(id)
-    if byte is None:
-        return None
-    try:
-        carrier = json.loads(byte.decode("utf-8"))
-    except Exception as e:
-        return None
-    return carrier
-
-def extract_context(tracer, carrier):
-    if (carrier is None):
-        return None
-    return tracer.extract(
-        format=Format.TEXT_MAP,
-        carrier=carrier
-    )
+    await tracer.saveContext(jobId, mainSpan.context())
 ```
 
+```
+    /* apps/nodejs-src/tracer.js */
+    saveContext(id, context) {
+        return new Promise((resolve, reject) => {
+            var map = {}
+            this.tracer.inject(context, opentracing.FORMAT_TEXT_MAP, map)
+            redis.set(id, JSON.stringify(map), (err) => {
+                if (err) { reject(err) }
+                resolve()
+            })
+        })
+    }
+```
+
+Then it executes the 2 workers launching them through two separated shell commands.
+
+```
+    /* apps/nodejs-src/app.js */ 
+    async function taskOne(jobId) {
+        await runCommand(`node /usr/src/nodejs-app/worker.js ${jobId}`)
+    }
+
+    async function taskTwo(jobId) {
+        await runCommand(`python3 /usr/src/python-app/worker.py ${jobId}`)
+    }
+```
+
+### Worker apps code
+
+The two workers receive in input just a job-id, but not the context span, that is retrieved through Redis instead.
+
+Below the code used from the two apps to read the span context from Redis. 
+
+**Worker-one (NodeJS code)**
+```
+    /* apps/nodejs-src/tracer.js */
+    async createContinuationSpan(spanName, contextId) {
+        return this.createSpan(
+            spanName, 
+            this.extractSpan(await this.loadContext(contextId))
+        )
+    }
+    
+    extractSpan(context) {
+        if (context) {
+            return this.tracer.extract(opentracing.FORMAT_TEXT_MAP, context)
+        }
+        return undefined
+    }
+    
+    loadContext(id) {
+        return new Promise((resolve, reject) => {
+            if (!id) resolve(undefined)
+            redis.get(id, (err, reply) => {
+                if (err) {
+                    reject(err)
+                }
+                if (reply) { 
+                    resolve(JSON.parse(reply.toString()))
+                } else {
+                    resolve(undefined)
+                }
+            })
+        })
+    }
+```
+
+**Worker-two (Python code)**
+```
+    def create_continuation_span(self, span_name, context_id):
+        return self.create_span(
+            span_name, 
+            self.extract_span(self.load_context(context_id))
+        )
+        
+    def load_context(self, id):
+        if id is None:
+            return None
+        print('id: {}'.format(id) )
+        byte = self.redis_cli.get(id)
+        if byte is None:
+            return None
+        try:
+            context = json.loads(byte.decode("utf-8"))
+        except Exception as e:
+            return e
+        return context
+
+    def extract_span(self, context):
+        if (context is None):
+            return None
+        return self.tracer.extract(
+            format=Format.TEXT_MAP,
+            carrier=context
+        )
+```
+
+## Tracing results: Jaeger UI
+
+[TODO]
+
+Below some examples of a trasaction and a trace generated by the 3 apps.
+
+![Jaeger UI 01](docs/jaeger-ui-01.png) 
+![Jaeger UI 02](docs/jaeger-ui-02.png) 
+![Jaeger UI 03](docs/jaeger-ui-03.png) 
 
 ## References
 
