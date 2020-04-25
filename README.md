@@ -34,12 +34,12 @@ Each module is deployed by a docker container through a docker-compose.
 
 ### Tracing infrastructure
 &nbsp;
-![Tracing infrastructure](docs/tracing-infrastructure.jpg)
+![Tracing infrastructure](docs/tracing-infrastructure.jpg){:height="50%" width="50%"}
 &nbsp;
 
 ### End to end transaction cycle
 &nbsp;
-![End-to-end transaction](docs/e2e-transaction.jpg) 
+![End-to-end transaction](docs/e2e-transaction.jpg){:width="250"} 
 &nbsp;
 
 ### Tracing details
