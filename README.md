@@ -1,94 +1,192 @@
-# Horus
+# Distributed tracing using Redis as message queue
 
-A project for learning about microservices observability. 
+An example of distributed tracing with Redis as message queue for propagate the context.
 
-* Centralized Logging
-* Distributed Tracing
+## Description 
 
-## Development Requirements
+[TODO]
 
-- Docker Compose v1.23.2
-- OSX or GNU/Linux
+## Project requirements
+- Docker compose 1.25.4
+- GNU/Linux
 
-## Development Setup
+## Project setup 
+1. Clone the repo and open the root folder
 
-1. Clone this repo and open the root folder in an IDE like *Visual Studio Code*.
+1. Start all microservices with the command:
 
-2. For each microservice, rename `example.env` to `.env` and supply the needed secrets.
-    > TODO: Eliminate this friction.
+        docker-compose -f docker-compose.yml up -d --build
 
-3. Start all microservices in *development mode*.
+1. Visit http://localhost:16686 to view traces
 
-        docker-compose -f docker-compose.dev.yml \
-            up -d --build
 
-    > In Development Mode
-    >
-    > - You can attach a remote debugger to a running service Docker for seemless debugging like placing breakpoints and watching variables.
-    > - Changes to source files will automatically restart the corresponding docker service.
+## Project architecture
 
-4. Optionally, attach the IDE's debugger to a service as follows in Visual Studio Code: *shift+cmd+D > Select a debug configuration > F5*.
-    > All vscode debug configurations are stored in *.vscode/launch.json*. You can modify configs as you see fit.
+The system is composed by the follow modules: 
+- Apps (that contains two NodeJS apps and a Phyton app)
+- Redis 
+- Jaeger Agent
+- Jaeger Collector
+- Jaeger Query/UI
+- Elasticsearch
 
-5. Visit http://localhost:16686 to view traces.
+Each module is deployed by a docker container through a docker-compose.
 
-### Useful dev commands
+### Tracing infrastructure
+&nbsp;
+![Tracing infrastructure](docs/tracing-infrastructure.jpg)
+&nbsp;
 
-    # list all running services
-    docker-compose -f docker-compose.dev.yml ps
+### End to end transaction cycle
+&nbsp;
+![End-to-end transaction](docs/e2e-transaction.jpg) 
+&nbsp;
 
-    # stop all services
-    docker-compose -f docker-compose.dev.yml down
+### Tracing details
 
-    # restart all [or specific] service
-    docker-compose -f docker-compose.dev.yml \
-        up -d --no-deps --build [service-name]
+## Redis as message bus
 
-    # tail logs from all [or specific] service
-    docker-compose -f docker-compose.dev.yml \
-        logs -f [service-name]
+As described above, the 3 apps: *main-service*, *worker-one* and *worker-two* use Redis to pass the span context.   
+The context is saved in Redis using a *job-id* as key. 
+
+### Main Service code (NodeJS)
+
+At startup the *main-service* creates a new span and saves the context it in Redis.
+
+```
+    /* apps/nodejs-src/app.js */
+    const jobId = Math.floor(new Date() / 1000)
+    const mainSpan = await tracer.createSpan(`job-${jobId}`)
+    ...
+    await tracer.saveContext(jobId, mainSpan.context())
+```
+
+```
+    /* apps/nodejs-src/tracer.js */
+    saveContext(id, context) {
+        return new Promise((resolve, reject) => {
+            var map = {}
+            this.tracer.inject(context, opentracing.FORMAT_TEXT_MAP, map)
+            redis.set(id, JSON.stringify(map), (err) => {
+                if (err) { reject(err) }
+                resolve()
+            })
+        })
+    }
+```
+
+Then it executes the 2 workers launching them through two separated shell commands.
+
+```
+    /* apps/nodejs-src/app.js */ 
+    async function taskOne(jobId) {
+        await runCommand(`node /usr/src/nodejs-app/worker.js ${jobId}`)
+    }
+
+    async function taskTwo(jobId) {
+        await runCommand(`python3 /usr/src/python-app/worker.py ${jobId}`)
+    }
+```
+
+### Worker apps code
+
+The two workers receive in input just a job-id, but not the context span, that is retrieved through Redis instead.
+
+Below the code used from the two apps to read the span context from Redis. 
+
+**Worker-one (NodeJS code)**
+```
+    /* apps/nodejs-src/tracer.js */
+    async createContinuationSpan(spanName, contextId) {
+        return this.createSpan(
+            spanName, 
+            this.extractSpan(await this.loadContext(contextId))
+        )
+    }
+    
+    extractSpan(context) {
+        if (context) {
+            return this.tracer.extract(opentracing.FORMAT_TEXT_MAP, context)
+        }
+        return undefined
+    }
+    
+    loadContext(id) {
+        return new Promise((resolve, reject) => {
+            if (!id) resolve(undefined)
+            redis.get(id, (err, reply) => {
+                if (err) {
+                    reject(err)
+                }
+                if (reply) { 
+                    resolve(JSON.parse(reply.toString()))
+                } else {
+                    resolve(undefined)
+                }
+            })
+        })
+    }
+```
+
+**Worker-two (Python code)**
+```
+    def create_continuation_span(self, span_name, context_id):
+        return self.create_span(
+            span_name, 
+            self.extract_span(self.load_context(context_id))
+        )
         
-    # see how an image was built
-    docker history <image-name>
+    def load_context(self, id):
+        if id is None:
+            return None
+        print('id: {}'.format(id) )
+        byte = self.redis_cli.get(id)
+        if byte is None:
+            return None
+        try:
+            context = json.loads(byte.decode("utf-8"))
+        except Exception as e:
+            return e
+        return context
 
-## Project Architecture
+    def extract_span(self, context):
+        if (context is None):
+            return None
+        return self.tracer.extract(
+            format=Format.TEXT_MAP,
+            carrier=context
+        )
+```
 
-### Logging Infrastructure
+## Tracing results: Jaeger UI
 
-![](docs/container-architecture.svg)
+[TODO]
 
-Read this [article](https://hackernoon.com/monitoring-containerized-microservices-with-a-centralized-logging-architecture-ba6771c1971a) for more details.
+Below some examples of a trasaction and a trace generated by the 3 apps.
+&nbsp;
+![Jaeger UI 01](docs/jaeger-ui-01.png)&nbsp;
+&nbsp;
+![Jaeger UI 02](docs/jaeger-ui-02.png)&nbsp; 
+&nbsp;
+![Jaeger UI 03](docs/jaeger-ui-03.png)&nbsp; 
 
-### Tracing Infrastructure
+## References
 
-![Tracing Backend Architecture](docs/distributed-tracing/tracing-backend.svg)
+### Medium articles
+- https://medium.com/swlh/microservices-observability-with-distributed-tracing-32ae467bb72a
+- https://medium.com/@codeboten/redis-tributed-distributed-tracing-through-redis-9b671187da47
+- https://medium.com/opentracing/announcing-python-opentracing-2-0-0-release-f4ee33de25ce
 
-Read this [article](#todo) for more details.
+### Jaeger clients
+- https://www.jaegertracing.io/docs/1.17/client-libraries/
+- https://github.com/jaegertracing/jaeger-client-python
+- https://github.com/jaegertracing/jaeger-client-node
+- https://opentracing-python.readthedocs.io/en/latest/api.html
 
-## Miscellaneous Notes
-
-### TODO (Improvement Considerations)
-
-- Research **jaeger-operator**
-
-- Name Duplication: The value of the `API_SERVER_ADDRESS` variable in *user-simulator/.env* depends on the service name `api-server` specified in *docker-compose.yml*. If we rename the service, we must also change the variable. Is there a way to make this DRY?
-
-- In the log-shipper container, I had to install a logz.io-specific plugin. Can't this step be eliminated since fluentd is capable of connecting to https endpoints without plugins?
-
-- Use sub-second precision for fluentd timestamps (probably best to use nanoseconds.)
-
-### Best practices
-
-1. You can pass secrets for a microservice using the `env_file` attribute in *docker-compose.yml*.
-2. Microservices can communicate using their service names if they are in the same docker network.
-
-### Docker Networking
-
-By default each containerized process runs in an isolated network namespace. For inter-container communication, place them in the same network namespace.
-
-### References
-
-- https://medium.com/lucjuggery/docker-in-development-with-nodemon-d500366e74df
-- https://blog.risingstack.com/how-to-debug-a-node-js-app-in-a-docker-container/
-- https://codefresh.io/docker-tutorial/debug_node_in_docker/
-- https://code.visualstudio.com/docs/editor/debugging
+### Opentracing 
+- https://opentracing.io/guides/javascript/
+- https://opentracing.io/docs/overview/tags-logs-baggage/
+- https://github.com/opentracing/opentracing-python
+- https://github.com/yurishkuro/opentracing-tutorial/tree/master/python/lesson01
+- https://opentracing.io/docs/overview/spans/
+- https://opentracing.io/guides/python/tracers/
