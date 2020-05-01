@@ -1,6 +1,6 @@
-# Distributed tracing using Redis as message bus
+# Distributed tracing using Redis as message queue
 
-An example of distributed tracing with Redis as message bus.
+An example of distributed tracing with Redis as message queue for propagate the context.
 
 ## Description 
 
